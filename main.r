@@ -5,7 +5,7 @@ options(warn=1) # really should be default in R
 # specify the packages used:
 required_packages = c(
 	'github.com/rmcelreath/rethinking' # for rlkjcorr & rmvrnom2
-	, 'github.com/stan-dev/cmdstanr' # for Stan stuff
+	, 'github.com/mike-lawrence/aria/aria' # for Stan stuff
 	, 'github.com/stan-dev/posterior' # for posterior diagnostics & summaries
 	, 'tidyverse' # for all that is good and holy
 )
@@ -245,59 +245,83 @@ data_for_stan = lst( # lst permits later entries to refer to earlier entries
 # double-check:
 glimpse(data_for_stan)
 
-# sample the posterior ----
-mod = cmdstanr::cmdstan_model(
-	'stan/mvn_cp.stan'
-	# 'stan/pairwise_mvn_cp.stan'
-	, include = 'stan'
-)
-iter_warmup = 1e3
-iter_sampling = 1e3
-fit = mod$sample(
-	data = data_for_stan
-	, chains = parallel::detectCores()/2
-	, parallel_chains = parallel::detectCores()/2
-	, iter_warmup = iter_warmup
-	, iter_sampling = iter_sampling
-	, seed = 1
-	, refresh = (iter_warmup+iter_sampling)/10
-)
+# check and compile the stan code ----
+aria::enable_rstudio_syntax_compile()
+code_path = 'stan/pairwise_mvn_cp.stan'
+file.edit(code_path)
+#go enable "check syntax on save" and save to trigger check & compile
 
-#save in case we want to look at the fit later
-fit$save_object(
-	paste(
-		str_remove(fit$metadata()$model_name,'_model')
+# sample ----
+fs::dir_create('sampled')
+out_path = fs::path(
+	'sampled'
+	, paste(
+		fs::path_file(fs::path_ext_remove(mod))
 		, sim_pars$num_subj
 		, sim_pars$num_vars
 		, sim_pars$num_trials
-		, 'fit.rds'
-		, sep='_'
-		, collapse='_'
+		, sep = '_'
 	)
+	, ext = 'qs'
 )
-# see ?CmdStanMCMC for methods available for `fit`
+aria::compose(
+	data = data_for_stan
+	, code_path = code_path
+	, out_path = out_path
+	# , exe_args_list = list(
+	# 	sample = list(
+	# 		num_warmup = 2e3
+	# 		, num_samples = 2e3
+	# 	)
+	# 	, init = .1
+	# )
+)
 
-#run cmdstan diagnostics for divergences, E-BFMI, etc
-fit$cmdstan_diagnose()
+#examine posterior ----
+fit = aria::coda(out_path)
+
+#toss warmup
+fit = filter(fit,!warmup)
+
+# Check treedepth, divergences, & rebfmi
+(
+	fit
+	%>% filter(!warmup)
+	%>% group_by(chain)
+	%>% summarise(
+		max_treedepth = max(treedepth__)
+		, num_divergent = sum(divergent__)
+		, rebfmi = var(energy__)/(sum(diff(energy__)^2)/n())
+	)
+	# %>% summarise(
+	# 	across(-chain,max)
+	# )
+)
 
 # gather summary for core parameters (inc. rhat & ess)
 (
-	c('lp__','noise','z_m','z_s','r')
-	%>% fit$draws()
-	%>% posterior::summarise_draws(
-		'rhat'
-		, 'ess_bulk'
-		, 'ess_tail'
-		, 'median'
-		, 'quantile2'
+	fit
+	%>% filter(!warmup)
+	%>% select(-(warmup:energy__))
+	%>% select(!ends_with(fixed('_')))
+	%>% select(!contains(fixed('_.')))
+	%>% select(!contains(fixed('z_arr')))
+	%>% select(!contains(fixed('z_mat')))
+	# %>% select(!contains(fixed('z.')))
+	%>% pivot_longer(
+		cols = c(-chain,-iteration)
+		, names_to = 'variable'
 	)
-	#adjust names a bit so proper_level_order works
-	%>% mutate(
-		variable = str_remove(variable,']')
-		, variable = str_replace(variable,fixed('['),fixed('.'))
-		, variable = str_replace(variable,',',fixed('.'))
+	%>% group_by(variable)
+	%>% summarise(
+		rhat = posterior::rhat(matrix(value,ncol=length(unique(chain))))
+		, ess_bulk = posterior::ess_bulk(matrix(value,ncol=length(unique(chain))))
+		, ess_tail = posterior::ess_tail(matrix(value,ncol=length(unique(chain))))
+		, as_tibble(t(posterior::quantile2(value,c(.1,.25,.5,.75,.9))))
+		, .groups = 'drop'
 	)
-) -> fit_summary
+) ->
+	fit_summary
 
 # check the range of rhat & ess
 (
@@ -306,13 +330,16 @@ fit$cmdstan_diagnose()
 	%>% summary()
 )
 
-# show the full tibble
-# print(fit_summary,n=nrow(fit_summary))
-
-# plot the group-level parameters
+#means:
 (
 	fit_summary
-	%>% filter(str_starts(variable,'z_m'))
+	%>% filter(str_starts(variable,fixed('z_m.')))
+	%>% left_join(
+		(
+			tibble(true=sim_pars$coef_means)
+			%>% mutate(variable = paste('z_m',1:n(),sep='.'))
+		)
+	)
 	%>% mutate(
 		variable = factor(variable,levels=proper_level_order(variable))
 	)
@@ -321,15 +348,15 @@ fit$cmdstan_diagnose()
 	+ geom_linerange(
 		mapping = aes(
 			x = variable
-			, ymin = q5
-			, ymax = q95
+			, ymin = q10
+			, ymax = q90
 			, colour = ess_tail
 		)
 	)
 	+ geom_point(
 		mapping = aes(
 			x = variable
-			, y = median
+			, y = q50
 			, fill = rhat
 		)
 		, shape=21
@@ -351,26 +378,33 @@ fit$cmdstan_diagnose()
 	)
 )
 
+# standard deviations:
 (
 	fit_summary
 	%>% filter(str_starts(variable,'z_s'))
+	%>% left_join(
+		(
+			tibble(true=sim_pars$coef_sds)
+			%>% mutate(variable = paste('z_s',1:n(),sep='.'))
+		)
+	)
 	%>% mutate(
 		variable = factor(variable,levels=proper_level_order(variable))
 	)
 	%>% ggplot()
-	+ geom_hline(yintercept=1)
+	+ geom_hline(yintercept = 0)
 	+ geom_linerange(
 		mapping = aes(
 			x = variable
-			, ymin = q5
-			, ymax = q95
+			, ymin = q10
+			, ymax = q90
 			, colour = ess_tail
 		)
 	)
 	+ geom_point(
 		mapping = aes(
 			x = variable
-			, y = median
+			, y = q50
 			, fill = rhat
 		)
 		, shape=21
@@ -392,25 +426,34 @@ fit$cmdstan_diagnose()
 	)
 )
 
+# correlations:
 (
-	fit$summary('r')
+	fit_summary
+	%>% filter(str_starts(variable,fixed('r.')))
+	%>% left_join(
+		(
+			tibble(true=sim_pars$cor_mat[lower.tri(sim_pars$cor_mat)])
+			%>% mutate(variable = paste('r',1:n(),sep='.'))
+		)
+	)
 	%>% mutate(
 		variable = factor(variable,levels=proper_level_order(variable))
 	)
 	%>% ggplot()
+	+ geom_hline(yintercept = .9)
 	+ geom_hline(yintercept = 0)
 	+ geom_linerange(
 		mapping = aes(
 			x = variable
-			, ymin = q5
-			, ymax = q95
+			, ymin = q10
+			, ymax = q90
 			, colour = ess_tail
 		)
 	)
 	+ geom_point(
 		mapping = aes(
 			x = variable
-			, y = median
+			, y = q50
 			, fill = rhat
 		)
 		, shape = 21
@@ -425,61 +468,10 @@ fit$cmdstan_diagnose()
 		low = 'white'
 		, high = scales::muted('red')
 	)
-	+ labs(y = 'posterior')
+	+ labs(y = 'Correlation')
 	+ scale_y_continuous(limits=c(-1,1))
 	+ theme(
 		panel.background = element_rect(fill='grey50')
 		, panel.grid = element_blank()
 	)
 )
-
-# plot the subject-level deviations-from-true
-(
-	fit$summary('z')
-	%>% left_join(
-		(
-			subj_coef
-			%>% (function(x){
-				ncxm1 = ncol(x) - 1
-				names(x)[names(x)!='subj'] = as.character(1:ncxm1)
-				return(x)
-			})
-			%>% pivot_longer(
-				-subj
-				# , names_prefix = 'v'
-			)
-			%>% mutate(
-				variable = paste0('z[',subj,',',name,']')
-			)
-		)
-	)
-	%>% mutate(
-		median = median - value
-		, q5 = q5 - value
-		, q95 = q95 - value
-		, name = factor(name,levels=proper_level_order(name))
-	)
-	%>% group_by(name)
-	%>% arrange(median)
-	%>% mutate(x=1:n())
-	%>% ggplot()
-	+ facet_grid(
-		name~.
-		, scales = 'free'
-	)
-	+ geom_hline(yintercept = 0)
-	+ geom_linerange(
-		mapping = aes(
-			x = x
-			, ymin = q5
-			, ymax = q95
-			, colour = median
-		)
-	)
-	+ scale_color_gradient2(guide=F)
-	+ theme(
-		panel.background = element_rect(fill='grey50')
-		, panel.grid = element_blank()
-	)
-)
-

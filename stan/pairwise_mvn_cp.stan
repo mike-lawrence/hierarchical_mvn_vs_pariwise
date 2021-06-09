@@ -1,3 +1,7 @@
+//aria: compile=1
+//aria: compile_debug=1
+//aria: run_debug=0 #because the auto-generated debug data doesn't work
+//aria: syntax_ignore = c('Warning: The parameter z_ has no priors.')
 data{
 
 	// o: number of trials

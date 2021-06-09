@@ -392,7 +392,7 @@ fit = filter(fit,!warmup)
 		variable = factor(variable,levels=proper_level_order(variable))
 	)
 	%>% ggplot()
-	+ geom_hline(yintercept = 0)
+	+ geom_hline(yintercept = 1)
 	+ geom_linerange(
 		mapping = aes(
 			x = variable

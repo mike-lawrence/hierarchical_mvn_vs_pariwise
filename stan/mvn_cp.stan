@@ -1,4 +1,6 @@
-//aria_args = list(compile=1,syn_check=0)
+//aria: compile=1
+//aria: compile_debug=1
+//aria: run_debug=0 #because the auto-generated debug data doesn't work
 #include helper_functions.stan
 data{
 

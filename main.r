@@ -247,7 +247,8 @@ glimpse(data_for_stan)
 
 # check and compile the stan code ----
 aria::enable_rstudio_syntax_compile()
-code_path = 'stan/pairwise_mvn_cp.stan'
+# code_path = 'stan/pairwise_mvn_cp.stan'
+code_path = 'stan/mvn_cp.stan'
 file.edit(code_path)
 #go enable "check syntax on save" and save to trigger check & compile
 
@@ -256,7 +257,7 @@ fs::dir_create('sampled')
 out_path = fs::path(
 	'sampled'
 	, paste(
-		fs::path_file(fs::path_ext_remove(mod))
+		fs::path_file(fs::path_ext_remove(code_path))
 		, sim_pars$num_subj
 		, sim_pars$num_vars
 		, sim_pars$num_trials

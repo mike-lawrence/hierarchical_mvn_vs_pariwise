@@ -354,14 +354,23 @@ fit = filter(fit,!warmup)
 			, colour = ess_tail
 		)
 	)
+	+ geom_linerange(
+		mapping = aes(
+			x = variable
+			, ymin = q25
+			, ymax = q75
+			, colour = ess_bulk
+		)
+		, size = 2
+	)
 	+ geom_point(
 		mapping = aes(
 			x = variable
 			, y = q50
 			, fill = rhat
 		)
-		, shape=21
-		, size = 5
+		, shape = 21
+		, size = 2
 	)
 	+ coord_flip()
 	+ scale_color_gradient(
@@ -372,7 +381,11 @@ fit = filter(fit,!warmup)
 		low = 'white'
 		, high = scales::muted('red')
 	)
-	+ labs(y = 'posterior')
+	+ labs(
+		y = 'Mean'
+		, colour = 'ESS'
+		, fill = 'Rhat'
+	)
 	+ theme(
 		panel.background = element_rect(fill='grey50')
 		, panel.grid = element_blank()
@@ -402,14 +415,23 @@ fit = filter(fit,!warmup)
 			, colour = ess_tail
 		)
 	)
+	+ geom_linerange(
+		mapping = aes(
+			x = variable
+			, ymin = q25
+			, ymax = q75
+			, colour = ess_bulk
+		)
+		, size = 2
+	)
 	+ geom_point(
 		mapping = aes(
 			x = variable
 			, y = q50
 			, fill = rhat
 		)
-		, shape=21
-		, size = 5
+		, shape = 21
+		, size = 2
 	)
 	+ coord_flip()
 	+ scale_color_gradient(
@@ -420,7 +442,11 @@ fit = filter(fit,!warmup)
 		low = 'white'
 		, high = scales::muted('red')
 	)
-	+ labs(y = 'posterior')
+	+ labs(
+		y = 'SD'
+		, colour = 'ESS'
+		, fill = 'Rhat'
+	)
 	+ theme(
 		panel.background = element_rect(fill='grey50')
 		, panel.grid = element_blank()
@@ -451,6 +477,15 @@ fit = filter(fit,!warmup)
 			, colour = ess_tail
 		)
 	)
+	+ geom_linerange(
+		mapping = aes(
+			x = variable
+			, ymin = q25
+			, ymax = q75
+			, colour = ess_bulk
+		)
+		, size = 2
+	)
 	+ geom_point(
 		mapping = aes(
 			x = variable
@@ -458,7 +493,7 @@ fit = filter(fit,!warmup)
 			, fill = rhat
 		)
 		, shape = 21
-		, size = 5
+		, size = 2
 	)
 	+ coord_flip()
 	+ scale_color_gradient(
@@ -469,7 +504,11 @@ fit = filter(fit,!warmup)
 		low = 'white'
 		, high = scales::muted('red')
 	)
-	+ labs(y = 'Correlation')
+	+ labs(
+		y = 'Correlation'
+		, colour = 'ESS'
+		, fill = 'Rhat'
+	)
 	+ scale_y_continuous(limits=c(-1,1))
 	+ theme(
 		panel.background = element_rect(fill='grey50')

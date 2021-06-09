@@ -28,7 +28,7 @@ set.seed(1) # change this to make different data
 lst(
 	# parameters you can play with
 	num_subj = 3e1 # number of subjects, must be an integer >1
-	, num_vars = 1 # number of 2-level variables manipulated as crossed and within each subject, must be an integer >0
+	, num_vars = 3 # number of 2-level variables manipulated as crossed and within each subject, must be an integer >0
 	#num_trial will determine whether the cp or ncp models will sample better
 	, num_trials = 1e3 # number of trials per subject/condition combo, must be an integer >1
 	# the rest of these you shouldn't touch
